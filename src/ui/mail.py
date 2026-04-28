@@ -7,6 +7,14 @@ import streamlit as st
 # 0. 설정 — API base URL은 환경변수로 오버라이드 가능
 API_BASE = os.getenv("MAIL4WORK_API", "http://localhost:8000")
 
+# 상태 분류 라벨에 시각적 마커 부여
+_STATUS_BADGE = {
+    "회신 필요": "📨 회신 필요",
+    "진행 중": "🚧 진행 중",
+    "완료": "🔑 완료",
+    "참고": "💡 참고",
+}
+
 # 1. 페이지 설정
 st.set_page_config(layout="wide", page_title="MailChat Log")
 
@@ -123,11 +131,16 @@ else:
                     unsafe_allow_html=True,
                 )
 
-                # 헤더
+                # 헤더 — 발신자 + 상태 뱃지
                 sender_label = "나" if is_me else (
                     msg.get("from_name") or msg["from"]
                 )
-                st.markdown(f"**{sender_label}**")
+                status = msg.get("status")
+                badge = _STATUS_BADGE.get(status, "") if status else ""
+                if badge:
+                    st.markdown(f"**{sender_label}** &nbsp;&nbsp; {badge}")
+                else:
+                    st.markdown(f"**{sender_label}**")
 
                 # 시각 (ISO 8601 → 보기 좋게)
                 ts = datetime.fromisoformat(msg["date"])
@@ -136,6 +149,17 @@ else:
                 # 요약 (있으면)
                 if msg.get("summary"):
                     st.info(msg["summary"])
+
+                # 추출된 일정 (있으면)
+                schedules = msg.get("schedules") or []
+                if schedules:
+                    lines = ["**📅 일정**"]
+                    for s in schedules:
+                        parsed = datetime.fromisoformat(s["parsed"])
+                        lines.append(
+                            f"- {parsed.strftime('%Y-%m-%d %H:%M')} — _{s['text']}_"
+                        )
+                    st.markdown("\n".join(lines))
 
                 # 전문 보기
                 if msg.get("body"):
