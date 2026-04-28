@@ -48,15 +48,23 @@ def sync(limit: int | None = None) -> dict:
 
 
 def _to_record(msg, folder: str, uid: int) -> dict:
+    # In-Reply-To 헤더 추출 (단일 Message-ID)
     in_reply_to = None
     irt = msg.headers.get("in-reply-to")
     if irt:
         in_reply_to = irt[0].strip()
 
+    # References 헤더 추출 (공백 구분된 Message-ID 리스트)
     refs: list[str] = []
     refs_header = msg.headers.get("references")
     if refs_header:
         refs = refs_header[0].split()
+
+    # 메일 자체의 RFC Message-ID — 스레드 매칭에 필요
+    rfc_message_id = None
+    mid = msg.headers.get("message-id")
+    if mid:
+        rfc_message_id = mid[0].strip()
 
     from_email = msg.from_values.email if msg.from_values else msg.from_
     from_name = msg.from_values.name if msg.from_values else None
@@ -65,6 +73,7 @@ def _to_record(msg, folder: str, uid: int) -> dict:
         "message_id": f"{folder}:{uid}",
         "folder": folder,
         "uid": uid,
+        "rfc_message_id": rfc_message_id,
         "subject": msg.subject,
         "from_email": from_email,
         "from_name": from_name,
