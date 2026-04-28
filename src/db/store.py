@@ -50,6 +50,14 @@ CREATE TABLE IF NOT EXISTS message_schedules (
 );
 
 CREATE INDEX IF NOT EXISTS idx_schedules_message ON message_schedules(message_id);
+
+CREATE TABLE IF NOT EXISTS message_status (
+    message_id TEXT PRIMARY KEY,
+    status TEXT NOT NULL,
+    matched_keyword TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (message_id) REFERENCES messages(message_id) ON DELETE CASCADE
+);
 """
 
 
@@ -180,3 +188,35 @@ def replace_schedules(
             "VALUES (?, ?, ?)",
             (message_id, s["text"], s["parsed_at"]),
         )
+
+
+def get_status(conn: sqlite3.Connection, message_id: str) -> dict | None:
+    # 분류 결과 조회 (없으면 None)
+    row = conn.execute(
+        "SELECT status, matched_keyword FROM message_status "
+        "WHERE message_id = ?",
+        (message_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return {"status": row["status"], "matched_keyword": row["matched_keyword"]}
+
+
+def save_status(
+    conn: sqlite3.Connection,
+    message_id: str,
+    status: str,
+    matched_keyword: str | None = None,
+) -> None:
+    # 상태 upsert (재분류 시 갱신)
+    conn.execute(
+        """
+        INSERT INTO message_status (message_id, status, matched_keyword)
+        VALUES (?, ?, ?)
+        ON CONFLICT(message_id) DO UPDATE SET
+            status = excluded.status,
+            matched_keyword = excluded.matched_keyword,
+            created_at = CURRENT_TIMESTAMP
+        """,
+        (message_id, status, matched_keyword),
+    )
