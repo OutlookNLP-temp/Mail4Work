@@ -4,6 +4,7 @@ from transformers import BartForConditionalGeneration, PreTrainedTokenizerFast
 
 MODEL_NAME = "gogamza/kobart-summarization"
 _MAX_INPUT_TOKENS = 1024
+_MIN_INPUT_CHARS = 100
 
 
 @lru_cache(maxsize=1)
@@ -25,6 +26,10 @@ def summarize(text: str, max_length: int = 128, num_beams: int = 4) -> str:
     if not text or not text.strip():
         return ""
 
+    # 본문이 너무 짧으면 요약 의미 없고 모델 출력도 망가짐 → 원문 반환
+    if len(text.strip()) < _MIN_INPUT_CHARS:
+        return text.strip()
+
     tokenizer, model = _load_model()
 
     # 토크나이즈 + 1024 토큰 초과분 잘라내기
@@ -35,11 +40,12 @@ def summarize(text: str, max_length: int = 128, num_beams: int = 4) -> str:
         return_tensors="pt",
     )
 
-    # 빔 서치로 요약 생성
+    # 빔 서치로 요약 생성 (3-gram 반복 방지)
     summary_ids = model.generate(
         inputs["input_ids"],
         num_beams=num_beams,
         max_length=max_length,
+        no_repeat_ngram_size=3,
         early_stopping=True,
     )
 
