@@ -1,4 +1,5 @@
 import os
+import re
 
 import httpx
 
@@ -48,7 +49,15 @@ def summarize(text: str, timeout: float = 120.0) -> str:
         # Ollama 미실행 또는 모델 미설치 → 원문 앞부분으로 fallback
         return body[:200]
 
-    return (r.json().get("response") or "").strip()
+    raw = (r.json().get("response") or "").strip()
+    return _split_sentences(raw)
+
+
+def _split_sentences(text: str) -> str:
+    # 마침표/물음표/느낌표 + 공백 기준으로 문장 단위 분리 → 빈 줄(paragraph)로 join
+    # markdown 렌더 시 paragraph break로 보이게 \n\n 사용
+    parts = re.split(r"(?<=[.!?])\s+", text.strip())
+    return "\n\n".join(p.strip() for p in parts if p.strip())
 
 
 def main():
