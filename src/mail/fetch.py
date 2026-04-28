@@ -57,10 +57,17 @@ def _sync_folder(mailbox: MailBox, folder: str, limit: int | None) -> int:
     fetched = 0
     with store.connect() as conn:
         last_uid = store.get_last_uid(conn, folder)
-        criteria = AND(uid=f"{last_uid + 1}:*") if last_uid > 0 else AND(all=True)
+        # 첫 sync면 최신부터, 이후엔 last_uid 이후 새 메일만 (UID 순)
+        is_first_sync = last_uid == 0
+        if is_first_sync:
+            criteria = AND(all=True)
+        else:
+            criteria = AND(uid=f"{last_uid + 1}:*")
 
         new_last_uid = last_uid
-        for msg in mailbox.fetch(criteria, limit=limit, mark_seen=False):
+        for msg in mailbox.fetch(
+            criteria, limit=limit, mark_seen=False, reverse=is_first_sync
+        ):
             uid = int(msg.uid)
             store.upsert_message(conn, _to_record(msg, folder, uid))
             fetched += 1
@@ -117,6 +124,8 @@ def _to_record(msg, folder: str, uid: int) -> dict:
 
 
 def main():
+    # FETCH_LIMIT 등 환경변수 읽기 전 .env 먼저 로드
+    load_dotenv()
     limit_env = os.getenv("FETCH_LIMIT", "50")
     limit = int(limit_env) if limit_env else None
 
