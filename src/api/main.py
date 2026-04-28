@@ -52,6 +52,31 @@ def _ensure_summary(conn, message_id: str, body: str | None) -> str:
     return text
 
 
+def _ensure_status(conn, message_id: str, body: str | None) -> str:
+    # 캐시된 상태가 있으면 반환, 없으면 키워드 분류 후 저장
+    cached = store.get_status(conn, message_id)
+    if cached:
+        return cached["status"]
+    c = classify.classify(body or "")
+    store.save_status(conn, message_id, c.status, c.matched_keyword)
+    return c.status
+
+
+def _ensure_schedules(conn, message_id: str, body: str | None) -> list[dict]:
+    # 캐시된 일정 있으면 반환, 없으면 추출 후 저장
+    cached = store.get_schedules(conn, message_id)
+    if cached:
+        return cached
+    items = schedule.extract_schedules(body or "")
+    if not items:
+        return []
+    payload = [
+        {"text": s.text, "parsed_at": s.parsed.isoformat()} for s in items
+    ]
+    store.replace_schedules(conn, message_id, payload)
+    return payload
+
+
 @app.post("/sync", response_model=SyncResult)
 def sync_endpoint():
     # 사용자 트리거 동기화 — 모든 설정 폴더에서 fetch
@@ -106,17 +131,26 @@ def list_messages(sender_id: str, limit: int = 200, offset: int = 0):
 
 
 def _to_message_response(conn, row: dict) -> Message:
-    summary = _ensure_summary(conn, row["message_id"], row.get("body"))
+    msg_id = row["message_id"]
+    body = row.get("body")
+    summary = _ensure_summary(conn, msg_id, body)
+    status = _ensure_status(conn, msg_id, body)
+    schedules = [
+        {"text": s["text"], "parsed": s["parsed_at"]}
+        for s in _ensure_schedules(conn, msg_id, body)
+    ]
     return Message.model_validate(
         {
-            "message_id": row["message_id"],
+            "message_id": msg_id,
             "direction": row["direction"],
             "from": row.get("from_email") or "",
             "from_name": row.get("from_name"),
             "date": row["date"],
             "subject": row.get("subject"),
             "summary": summary,
-            "body": row.get("body"),
+            "body": body,
+            "status": status,
+            "schedules": schedules,
             "attachments": [],
         }
     )
