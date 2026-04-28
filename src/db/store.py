@@ -32,6 +32,13 @@ CREATE TABLE IF NOT EXISTS sync_state (
     last_uid INTEGER NOT NULL DEFAULT 0,
     last_sync_at TEXT
 );
+
+CREATE TABLE IF NOT EXISTS summaries (
+    message_id TEXT PRIMARY KEY,
+    summary TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (message_id) REFERENCES messages(message_id) ON DELETE CASCADE
+);
 """
 
 
@@ -109,3 +116,27 @@ def count_messages(
     else:
         row = conn.execute("SELECT COUNT(*) AS c FROM messages").fetchone()
     return row["c"]
+
+
+def get_summary(conn: sqlite3.Connection, message_id: str) -> str | None:
+    # 캐시된 요약 조회 (없으면 None)
+    row = conn.execute(
+        "SELECT summary FROM summaries WHERE message_id = ?", (message_id,)
+    ).fetchone()
+    return row["summary"] if row else None
+
+
+def save_summary(
+    conn: sqlite3.Connection, message_id: str, summary: str
+) -> None:
+    # 요약 upsert (있으면 덮어쓰고 created_at 갱신)
+    conn.execute(
+        """
+        INSERT INTO summaries (message_id, summary)
+        VALUES (?, ?)
+        ON CONFLICT(message_id) DO UPDATE SET
+            summary = excluded.summary,
+            created_at = CURRENT_TIMESTAMP
+        """,
+        (message_id, summary),
+    )
