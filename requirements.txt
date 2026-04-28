@@ -1,3 +1,21 @@
+# Mail
 imap-tools>=1.5
 python-dotenv>=1.0
+
+# NLP / Analysis
+transformers>=4.40
+torch>=2.2
+sentencepiece>=0.2
+dateparser>=1.2
+
+# Backend
+fastapi>=0.110
+uvicorn[standard]>=0.27
+pydantic>=2.6
+
+# Frontend
+streamlit>=1.32
+httpx>=0.27
+
+# Data
 pandas>=2.2
