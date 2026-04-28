@@ -47,6 +47,8 @@ class Message(BaseModel):
     subject: str | None = None
     summary: str | None = None
     body: str | None = None
+    status: str | None = None
+    schedules: list[Schedule] = []
     attachments: list[Attachment] = []
 
 
