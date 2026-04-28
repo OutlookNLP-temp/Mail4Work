@@ -39,6 +39,17 @@ CREATE TABLE IF NOT EXISTS summaries (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (message_id) REFERENCES messages(message_id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS message_schedules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_id TEXT NOT NULL,
+    text TEXT NOT NULL,
+    parsed_at TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (message_id) REFERENCES messages(message_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_schedules_message ON message_schedules(message_id);
 """
 
 
@@ -140,3 +151,32 @@ def save_summary(
         """,
         (message_id, summary),
     )
+
+
+def get_schedules(
+    conn: sqlite3.Connection, message_id: str
+) -> list[dict]:
+    # 메시지의 추출된 일정 리스트 조회
+    rows = conn.execute(
+        "SELECT text, parsed_at FROM message_schedules "
+        "WHERE message_id = ? ORDER BY parsed_at",
+        (message_id,),
+    ).fetchall()
+    return [{"text": r["text"], "parsed_at": r["parsed_at"]} for r in rows]
+
+
+def replace_schedules(
+    conn: sqlite3.Connection,
+    message_id: str,
+    schedules: list[dict],
+) -> None:
+    # 메시지의 일정 전체 교체 (재추출 시 깔끔하게 갱신)
+    conn.execute(
+        "DELETE FROM message_schedules WHERE message_id = ?", (message_id,)
+    )
+    for s in schedules:
+        conn.execute(
+            "INSERT INTO message_schedules (message_id, text, parsed_at) "
+            "VALUES (?, ?, ?)",
+            (message_id, s["text"], s["parsed_at"]),
+        )
