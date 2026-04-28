@@ -308,3 +308,109 @@ def get_thread_messages(
         (thread_id,),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+def list_contacts(
+    conn: sqlite3.Connection,
+    me_email: str,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[dict]:
+    # contact = 받은 메일이면 from_email, 보낸 메일이면 첫 to_email. 자기 자신 제외.
+    # contact 이름은 received 메일의 from_name만 사용 (sent에선 from_name이 본인이라 의미 없음)
+    rows = conn.execute(
+        """
+        WITH msg_contacts AS (
+            SELECT
+                CASE
+                    WHEN from_email = ? THEN json_extract(to_emails, '$[0]')
+                    ELSE from_email
+                END AS contact_email,
+                CASE
+                    WHEN from_email = ? THEN NULL
+                    ELSE from_name
+                END AS contact_name,
+                date
+            FROM messages
+            WHERE from_email IS NOT NULL
+        )
+        SELECT
+            contact_email AS sender_id,
+            contact_email AS email,
+            MAX(contact_name) AS name,
+            COUNT(*) AS message_count,
+            MAX(date) AS latest_at
+        FROM msg_contacts
+        WHERE contact_email IS NOT NULL AND contact_email != ?
+        GROUP BY contact_email
+        ORDER BY MAX(date) DESC
+        LIMIT ? OFFSET ?
+        """,
+        (me_email, me_email, me_email, limit, offset),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def list_messages_with_contact(
+    conn: sqlite3.Connection,
+    me_email: str,
+    contact_email: str,
+    limit: int = 200,
+    offset: int = 0,
+) -> list[dict]:
+    # me ↔ contact 사이의 메시지들 시간순. direction 필드 부여.
+    rows = conn.execute(
+        """
+        SELECT * FROM messages
+        WHERE
+            (from_email = ? AND json_extract(to_emails, '$[0]') = ?)
+            OR
+            (from_email = ?)
+        ORDER BY date ASC
+        LIMIT ? OFFSET ?
+        """,
+        (me_email, contact_email, contact_email, limit, offset),
+    ).fetchall()
+
+    result = []
+    for r in rows:
+        m = dict(r)
+        # 발신자가 나면 sent, 아니면 received
+        m["direction"] = "sent" if r["from_email"] == me_email else "received"
+        result.append(m)
+    return result
+
+
+def get_contact_stats(
+    conn: sqlite3.Connection, me_email: str, contact_email: str
+) -> dict:
+    # contact와 주고받은 메시지 카운트 (총/보낸/받은)
+    row = conn.execute(
+        """
+        SELECT
+            SUM(CASE WHEN from_email = ? THEN 1 ELSE 0 END) AS sent,
+            SUM(CASE WHEN from_email = ? THEN 1 ELSE 0 END) AS received,
+            COUNT(*) AS total
+        FROM messages
+        WHERE
+            (from_email = ? AND json_extract(to_emails, '$[0]') = ?)
+            OR
+            (from_email = ?)
+        """,
+        (me_email, contact_email, me_email, contact_email, contact_email),
+    ).fetchone()
+    return {
+        "total": row["total"] or 0,
+        "sent": row["sent"] or 0,
+        "received": row["received"] or 0,
+    }
+
+
+def get_message(
+    conn: sqlite3.Connection, message_id: str
+) -> dict | None:
+    # 메시지 1건 조회
+    row = conn.execute(
+        "SELECT * FROM messages WHERE message_id = ?", (message_id,)
+    ).fetchone()
+    return dict(row) if row else None
