@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS messages (
     message_id TEXT PRIMARY KEY,
     folder TEXT NOT NULL,
     uid INTEGER NOT NULL,
+    rfc_message_id TEXT,
     subject TEXT,
     from_email TEXT,
     from_name TEXT,
@@ -20,6 +21,7 @@ CREATE TABLE IF NOT EXISTS messages (
     body TEXT,
     in_reply_to TEXT,
     refs TEXT NOT NULL DEFAULT '[]',
+    thread_id TEXT,
     has_attachments INTEGER NOT NULL DEFAULT 0,
     fetched_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -65,6 +67,24 @@ def init_db(path: Path = DB_PATH) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(path) as conn:
         conn.executescript(SCHEMA)
+        # 기존 DB에도 새 컬럼/인덱스 적용
+        _migrate(conn)
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    # 기존 messages 테이블에 새 컬럼이 빠져있으면 ALTER로 추가
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(messages)").fetchall()}
+    if "rfc_message_id" not in cols:
+        conn.execute("ALTER TABLE messages ADD COLUMN rfc_message_id TEXT")
+    if "thread_id" not in cols:
+        conn.execute("ALTER TABLE messages ADD COLUMN thread_id TEXT")
+    # 컬럼 보장 후 인덱스 생성 (이미 있으면 스킵)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_messages_rfc ON messages(rfc_message_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages(thread_id)"
+    )
 
 
 @contextmanager
@@ -82,14 +102,15 @@ def upsert_message(conn: sqlite3.Connection, m: dict[str, Any]) -> None:
     conn.execute(
         """
         INSERT OR REPLACE INTO messages (
-            message_id, folder, uid, subject, from_email, from_name,
+            message_id, folder, uid, rfc_message_id, subject, from_email, from_name,
             to_emails, date, body, in_reply_to, refs, has_attachments
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             m["message_id"],
             m["folder"],
             m["uid"],
+            m.get("rfc_message_id"),
             m.get("subject"),
             m.get("from_email"),
             m.get("from_name"),
@@ -220,3 +241,70 @@ def save_status(
         """,
         (message_id, status, matched_keyword),
     )
+
+
+def list_senders(
+    conn: sqlite3.Connection, limit: int = 50, offset: int = 0
+) -> list[dict]:
+    # 발신자별 집계 — 최신 메일 순
+    rows = conn.execute(
+        """
+        SELECT
+            from_email AS sender_id,
+            from_email AS email,
+            MAX(from_name) AS name,
+            COUNT(DISTINCT thread_id) AS thread_count,
+            0 AS unread_count,
+            MAX(date) AS latest_at
+        FROM messages
+        WHERE from_email IS NOT NULL
+        GROUP BY from_email
+        ORDER BY MAX(date) DESC
+        LIMIT ? OFFSET ?
+        """,
+        (limit, offset),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def list_threads_by_sender(
+    conn: sqlite3.Connection,
+    sender_id: str,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[dict]:
+    # 해당 발신자가 참여한 스레드들 — 스레드 메타데이터는 전체 메시지 기준
+    rows = conn.execute(
+        """
+        SELECT
+            thread_id,
+            MAX(subject) AS subject,
+            COUNT(*) AS message_count,
+            MAX(date) AS latest_at
+        FROM messages
+        WHERE thread_id IN (
+            SELECT DISTINCT thread_id FROM messages
+            WHERE from_email = ? AND thread_id IS NOT NULL
+        )
+        GROUP BY thread_id
+        ORDER BY MAX(date) DESC
+        LIMIT ? OFFSET ?
+        """,
+        (sender_id, limit, offset),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_thread_messages(
+    conn: sqlite3.Connection, thread_id: str
+) -> list[dict]:
+    # 스레드의 메시지들을 시간순(오래된 → 최신)으로
+    rows = conn.execute(
+        """
+        SELECT * FROM messages
+        WHERE thread_id = ?
+        ORDER BY date ASC
+        """,
+        (thread_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
