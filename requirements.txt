@@ -3,9 +3,7 @@ imap-tools>=1.5
 python-dotenv>=1.0
 
 # NLP / Analysis
-transformers>=4.40
-torch>=2.2
-sentencepiece>=0.2
+# 요약은 로컬 Ollama(EXAONE)를 HTTP로 호출 — 별도 ML 라이브러리 불필요
 
 # Backend
 fastapi>=0.110

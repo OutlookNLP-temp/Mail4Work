@@ -1,66 +1,65 @@
-from functools import lru_cache
+import os
 
-from transformers import BartForConditionalGeneration, PreTrainedTokenizerFast
+import httpx
 
-MODEL_NAME = "gogamza/kobart-summarization"
-_MAX_INPUT_TOKENS = 1024
+# Ollama 로컬 LLM 엔드포인트와 사용 모델 (env로 오버라이드 가능)
+_OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+_MODEL = os.getenv("SUMMARIZER_MODEL", "exaone3.5:2.4b")
+
+# 짧은 메일은 그냥 원문 보여주는 게 더 유용
 _MIN_INPUT_CHARS = 100
 
+_PROMPT = """다음은 한국어 메일 본문입니다. 핵심 내용만 2-3문장 이내로 한국어로 요약해 주세요. 인사말과 마무리 인사말은 빼고, 누가 무엇을 요청했는지/공유했는지가 드러나게 해 주세요.
 
-@lru_cache(maxsize=1)
-def _load_model() -> tuple[PreTrainedTokenizerFast, BartForConditionalGeneration]:
-    # 모델 1회만 로드해 메모리에 캐시
-    tokenizer = PreTrainedTokenizerFast.from_pretrained(MODEL_NAME)
-    model = BartForConditionalGeneration.from_pretrained(MODEL_NAME)
-    # 추론 전용 모드
-    model.eval()
-    return tokenizer, model
+[메일 본문]
+{body}
+
+[요약]"""
 
 
-def summarize(text: str, max_length: int = 128, num_beams: int = 4) -> str:
-    """KoBART로 한국어 텍스트를 요약한다.
-
-    1024 토큰 초과분은 잘라내고 요약한다.
-    """
+def summarize(text: str, timeout: float = 120.0) -> str:
+    """EXAONE(Ollama)로 한국어 메일 본문을 요약한다."""
     # 빈 입력 가드
     if not text or not text.strip():
         return ""
 
-    # 본문이 너무 짧으면 요약 의미 없고 모델 출력도 망가짐 → 원문 반환
-    if len(text.strip()) < _MIN_INPUT_CHARS:
-        return text.strip()
+    # 너무 짧으면 모델 거치지 않고 원문 반환
+    body = text.strip()
+    if len(body) < _MIN_INPUT_CHARS:
+        return body
 
-    tokenizer, model = _load_model()
+    # Ollama generate API 호출
+    try:
+        r = httpx.post(
+            f"{_OLLAMA_HOST}/api/generate",
+            json={
+                "model": _MODEL,
+                "prompt": _PROMPT.format(body=body),
+                "stream": False,
+                "options": {
+                    "temperature": 0.2,
+                    "num_predict": 200,
+                },
+            },
+            timeout=timeout,
+        )
+        r.raise_for_status()
+    except httpx.HTTPError:
+        # Ollama 미실행 또는 모델 미설치 → 원문 앞부분으로 fallback
+        return body[:200]
 
-    # 토크나이즈 + 1024 토큰 초과분 잘라내기
-    inputs = tokenizer(
-        text,
-        max_length=_MAX_INPUT_TOKENS,
-        truncation=True,
-        return_tensors="pt",
-    )
-
-    # 빔 서치로 요약 생성 (3-gram 반복 방지)
-    summary_ids = model.generate(
-        inputs["input_ids"],
-        num_beams=num_beams,
-        max_length=max_length,
-        no_repeat_ngram_size=3,
-        early_stopping=True,
-    )
-
-    # 토큰 → 텍스트 디코딩 (특수 토큰 제외)
-    return tokenizer.decode(summary_ids[0], skip_special_tokens=True).strip()
+    return (r.json().get("response") or "").strip()
 
 
 def main():
     sample = (
-        "안녕하세요. 다음 주 월요일에 예정된 프로젝트 미팅 일정을 확정하고자 합니다. "
-        "지난번 논의된 기획안에 대한 검토 의견을 정리해서 첨부 파일로 보냅니다. "
-        "특히 3장 일정 부분과 5장 예산 부분은 추가 논의가 필요할 것 같습니다. "
-        "검토 후 회신 부탁드립니다. 감사합니다."
+        "안녕하세요. 개발팀 정수민 매니저입니다. "
+        "결제 모듈 리팩토링 PR 올렸습니다. "
+        "주요 변경은 인터페이스 분리와 테스트 커버리지 보강입니다. "
+        "내일 오후 3시까지 리뷰 부탁드릴 수 있을까요?"
     )
-    print("입력 길이:", len(sample), "자")
+    print("입력:", sample)
+    print()
     print("요약:", summarize(sample))
 
 
