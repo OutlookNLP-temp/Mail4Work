@@ -105,6 +105,23 @@ def evaluate_quality(rows: list[sqlite3.Row]) -> dict:
     metrics["closing_end"] = sum(1 for r in rows if _CLOSING_END_RE.search(r["summary"]))
     metrics["crlf"] = sum(1 for r in rows if "\r" in r["summary"])
 
+    # 톤 통일 — 모든 문장이 합쇼체("~다.", "~까?")로 끝나는지
+    # LLM 거치는 긴 메일만 측정 (짧은 메일은 원문 그대로)
+    # 숫자 사이 마침표("2.0") 는 문장 구분으로 보지 않게 lookahead 사용
+    sent_split_re = re.compile(r"[.!?](?=\s+[^\d]|\s*$)")
+    honorific_violations = 0
+    for r in long_rows:
+        sentences = [s.strip() for s in sent_split_re.split(r["summary"]) if s.strip()]
+        if not sentences:
+            continue
+        # 합쇼체 종결: 마지막 한글이 '다'/'까'/'죠'/'네'
+        all_honorific = all(
+            re.search(r"[가-힣]*(다|까|죠|네)$", s) for s in sentences
+        )
+        if not all_honorific:
+            honorific_violations += 1
+    metrics["tone_violations"] = honorific_violations
+
     # 긍정 메트릭
     metrics["sent_first_person"] = sum(
         1 for r in sent_rows
@@ -235,6 +252,7 @@ def main():
     print(f"  시작 인사말 잔존     : {_pct(q['greet_start'], q['n_total'])}")
     print(f"  끝 인사 잔존         : {_pct(q['closing_end'], q['n_total'])}")
     print(f"  CRLF 잔존            : {_pct(q['crlf'], q['n_total'])}")
+    print(f"  톤 비통일 (명사컷 등): {_pct(q['tone_violations'], q['n_long'])}")
     print()
     print("긍정 메트릭 (높을수록 좋음)")
     print(f"  sent 1인칭 사용      : {_pct(q['sent_first_person'], q['n_sent'])}")
