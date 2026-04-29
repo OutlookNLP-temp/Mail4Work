@@ -37,8 +37,8 @@ def trigger_sync() -> dict:
 
 
 def render_sync_button() -> None:
-    # 사이드바 공통: 동기화 버튼
-    if st.sidebar.button("🔄 새 메일 동기화"):
+    # 사이드바 공통: 동기화 버튼 (검색창과 같은 가로 폭)
+    if st.sidebar.button("🔄 새 메일 동기화", use_container_width=True):
         with st.spinner("IMAP 동기화 중..."):
             try:
                 result = trigger_sync()
