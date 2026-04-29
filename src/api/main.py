@@ -40,14 +40,20 @@ def _me_email() -> str:
     return os.getenv("ME_EMAIL") or os.environ.get("IMAP_USER", "")
 
 
-def _ensure_summary(conn, message_id: str, body: str | None) -> str:
-    # 캐시된 요약이 있으면 반환, 없으면 계산해 저장
+def _ensure_summary(
+    conn,
+    message_id: str,
+    body: str | None,
+    sender_name: str | None = None,
+    direction: str = "received",
+) -> str:
+    # 캐시된 요약이 있으면 반환, 없으면 발신자/방향 컨텍스트와 함께 요약
     cached = store.get_summary(conn, message_id)
     if cached is not None:
         return cached
     if not body:
         return ""
-    text = summarize.summarize(body)
+    text = summarize.summarize(body, sender_name=sender_name, direction=direction)
     store.save_summary(conn, message_id, text)
     return text
 
@@ -133,7 +139,13 @@ def list_messages(sender_id: str, limit: int = 200, offset: int = 0):
 def _to_message_response(conn, row: dict) -> Message:
     msg_id = row["message_id"]
     body = row.get("body")
-    summary = _ensure_summary(conn, msg_id, body)
+    summary = _ensure_summary(
+        conn,
+        msg_id,
+        body,
+        sender_name=row.get("from_name") or row.get("from_email"),
+        direction=row["direction"],
+    )
     status = _ensure_status(conn, msg_id, body)
     schedules = [
         {"text": s["text"], "parsed": s["parsed_at"]}
@@ -192,7 +204,13 @@ def _thread_metadata(conn, thread_id: str) -> tuple[str, str, bool]:
         return ("", "참고", False)
 
     first = msgs[0]
-    summary = _ensure_summary(conn, first["message_id"], first.get("body"))
+    summary = _ensure_summary(
+        conn,
+        first["message_id"],
+        first.get("body"),
+        sender_name=first.get("from_name") or first.get("from_email"),
+        direction=first.get("direction", "received"),
+    )
 
     # 상태 캐시 또는 새로 계산
     cached_status = store.get_status(conn, first["message_id"])
