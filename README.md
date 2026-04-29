@@ -8,17 +8,21 @@
 ## Features
 
 ### 📊 Dashboard
-<img width="800" height="400" alt="image" src="https://github.com/user-attachments/assets/cc057c63-74ea-42be-9564-8c04c33f36de" />
-
 
 - 회신 필요 / 진행 중 / 이번 주 일정 / 신규 24H KPI 카드
+<img width="500" height="150" alt="image" src="https://github.com/user-attachments/assets/a99008bd-0d71-4faa-aab2-47bc9d8a0e01" />
+
 - 회신 필요 메일 리스트 + 다가오는 일정 카드
+<img width="600" height="300" alt="image" src="https://github.com/user-attachments/assets/33c6e614-dcd3-45cc-bc72-ccb395e479e0" />
 
 - 컨택트별 최근 7일 활동 히트맵
 - 메일 상태 분포 도넛 + 인사이트 추천
+<img width="600" height="200" alt="image" src="https://github.com/user-attachments/assets/bd0dafe3-45a2-429f-ad09-49c57703f40b" />
+
 
 ### 💬 Mail Groups
-<img width="800" height="400" alt="image" src="https://github.com/user-attachments/assets/a40a4d88-19d5-4aa4-a9bc-2139e54dcd49" />
+<img width="600" height="300" alt="image" src="https://github.com/user-attachments/assets/33a8a47a-5b24-4bc0-9bee-2cdd46cd0ab3" />
+
 
 - 컨택트별 채팅 인터페이스 — 받은 메일은 좌측, 보낸 메일은 우측 정렬
 - 메시지마다 자동 분류된 **상태 뱃지** (회신 필요 / 진행 중 / 완료 / 참고)
