@@ -33,7 +33,7 @@ _CSS = """
     background: #ffffff;
     border-radius: 14px;
     padding: 22px 24px;
-    border: 1px solid #e9ecf0;
+    border: 2px solid #e9ecf0;
 }
 .kpi-head {
     font-size: 13px;
@@ -58,7 +58,7 @@ _CSS = """
 /* 섹션 단위 컨테이너 카드 */
 .section-card {
     background: #ffffff;
-    border: 1px solid #e9ecf0;
+    border: 2px solid #e9ecf0;
     border-radius: 16px;
     padding: 20px 24px;
     margin-bottom: 16px;
@@ -152,6 +152,46 @@ _CSS = """
 .sched-title { font-weight: 600; font-size: 14px; color: #1a1a1a; }
 .sched-meta  { font-size: 12px; color: #777; margin-top: 4px; }
 
+/* 컨택트 활동 히트맵 */
+.heatmap-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 0;
+    border-bottom: 1px dashed #e9ecf0;
+}
+.heatmap-row:last-child { border-bottom: none; }
+.heatmap-row:first-of-type { padding-top: 0; }
+.heatmap-name { width: 110px; font-size: 13px; color: #1a1a1a; font-weight: 500; }
+.heatmap-cells { display: flex; gap: 4px; flex: 1; }
+.heatmap-cell {
+    width: 26px;
+    height: 22px;
+    border-radius: 4px;
+    background: #f0f4fa;
+    flex-shrink: 0;
+}
+.heatmap-cell.i1 { background: #d8e6fa; }
+.heatmap-cell.i2 { background: #a9caf3; }
+.heatmap-cell.i3 { background: #6ea6ec; }
+.heatmap-cell.i4 { background: #3a7ddc; }
+.heatmap-total { font-weight: 700; color: #1a1a1a; min-width: 30px; text-align: right; font-size: 14px; }
+.section-meta { font-size: 12px; color: #9ba3b3; }
+
+/* 도넛 + 범례 */
+.donut-wrap {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    margin: 6px 0;
+}
+.donut-svg { flex-shrink: 0; }
+.donut-legend { display: flex; flex-direction: column; gap: 12px; flex: 1; }
+.legend-row { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.legend-label { color: #5a6478; flex: 1; }
+.legend-pct { font-weight: 700; color: #1a1a1a; }
+
 /* 상단 헤더 */
 .header-wrap {
     display: flex;
@@ -167,7 +207,6 @@ _CSS = """
 
 .insight-card {
     background: #f3f7ff;
-    border-left: 4px solid #5b8def;
     padding: 14px 18px;
     border-radius: 8px;
     color: #2c3e64;
@@ -241,6 +280,69 @@ def _reply_row(name: str, dt: datetime, body: str) -> str:
         "</div>"
         f'<div class="reply-text">{escape(snippet)}</div>'
         "</div>"
+        "</div>"
+    )
+
+
+def _heatmap_intensity(count: int) -> str:
+    # 일별 메일 수에 따라 4단계 색 강도
+    if count == 0:
+        return ""
+    if count == 1:
+        return "i1"
+    if count <= 3:
+        return "i2"
+    if count <= 5:
+        return "i3"
+    return "i4"
+
+
+def _heatmap_row(name: str, counts: list[int], total: int) -> str:
+    cells = "".join(
+        f'<div class="heatmap-cell {_heatmap_intensity(c)}" title="{c}건"></div>'
+        for c in counts
+    )
+    return (
+        '<div class="heatmap-row">'
+        f'<div class="heatmap-name">{escape(name)}</div>'
+        f'<div class="heatmap-cells">{cells}</div>'
+        f'<div class="heatmap-total">{total}</div>'
+        "</div>"
+    )
+
+
+def _donut_svg(slices: list[tuple[str, int, str]], total: int) -> str:
+    # 도넛 SVG — stroke-dasharray로 각 조각 그리기
+    cx, cy, r = 60, 60, 38
+    sw = 18
+    circ = 2 * 3.141592653589793 * r
+    parts: list[str] = []
+    offset = 0.0
+    for _label, count, color in slices:
+        if count <= 0 or total <= 0:
+            continue
+        seg = count / total * circ
+        gap = circ - seg
+        parts.append(
+            f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="none" stroke="{color}" '
+            f'stroke-width="{sw}" stroke-dasharray="{seg:.2f} {gap:.2f}" '
+            f'stroke-dashoffset="{-offset:.2f}" '
+            f'transform="rotate(-90 {cx} {cy})" />'
+        )
+        offset += seg
+    return (
+        '<svg viewBox="0 0 120 120" width="180" height="180" class="donut">'
+        + "".join(parts)
+        + "</svg>"
+    )
+
+
+def _legend_row(label: str, color: str, pct: float) -> str:
+    return (
+        '<div class="legend-row">'
+        f'<span class="legend-dot" style="background:{color}"></span>'
+        f'<span class="legend-label">{escape(label)}</span>'
+        f'<span class="legend-pct">{pct:.0f}%</span>'
         "</div>"
     )
 
@@ -462,81 +564,86 @@ st.divider()
 # ─── 컨택트별 활동 + 상태 분포 ───────────────────────────────────────────
 b1, b2 = st.columns(2)
 
+# 컨택트별 활동 — 최근 7일 히트맵
 with b1:
-    st.subheader("👥 컨택트별 활동")
     top = sorted(senders, key=lambda s: s["message_count"], reverse=True)[:8]
-    df_c = pd.DataFrame(
-        {
-            "컨택트": [s.get("name") or s["email"] for s in top],
-            "메일 수": [s["message_count"] for s in top],
-        }
-    )
-    chart_c = (
-        alt.Chart(df_c)
-        .mark_bar(cornerRadiusEnd=4, color="#5b8def")
-        .encode(
-            x=alt.X("메일 수:Q", axis=alt.Axis(grid=False)),
-            y=alt.Y("컨택트:N", sort="-x", axis=alt.Axis(labelLimit=200)),
-            tooltip=["컨택트", "메일 수"],
-        )
-        .properties(height=300)
-    )
-    st.altair_chart(chart_c, use_container_width=True)
-
-with b2:
-    st.subheader("🍩 메일 상태 분포")
-    counter = Counter(m.get("status") or "참고" for m in all_messages)
-    total = sum(counter.values()) or 1
-    df_s = pd.DataFrame(
-        {
-            "상태": list(counter.keys()),
-            "수": list(counter.values()),
-            "퍼센트": [v / total * 100 for v in counter.values()],
-        }
-    )
-    chart_s = (
-        alt.Chart(df_s)
-        .mark_arc(innerRadius=60, padAngle=0.02, cornerRadius=2)
-        .encode(
-            theta=alt.Theta("수:Q"),
-            color=alt.Color(
-                "상태:N",
-                scale=alt.Scale(
-                    domain=list(_STATUS_COLORS.keys()),
-                    range=list(_STATUS_COLORS.values()),
-                ),
-                legend=alt.Legend(title="상태"),
-            ),
-            tooltip=[
-                "상태",
-                "수",
-                alt.Tooltip("퍼센트:Q", format=".1f"),
-            ],
-        )
-        .properties(height=300)
-    )
-    st.altair_chart(chart_s, use_container_width=True)
-
-# ─── 인사이트 ────────────────────────────────────────────────────────────
-if all_messages and needs_reply:
-    pct = len(needs_reply) / len(all_messages) * 100
-    if pct > 20:
-        top_emails = [
-            e for e, _ in Counter(m["sender_email"] for m in needs_reply).most_common(2)
+    days_back = [(now - timedelta(days=i)).date() for i in range(6, -1, -1)]
+    rows_html = ""
+    for s in top:
+        sender_msgs = [m for m in all_messages if m["sender_email"] == s["email"]]
+        counts = [
+            sum(1 for m in sender_msgs if _naive(m["date"]).date() == d)
+            for d in days_back
         ]
-        names = []
-        seen: set[str] = set()
-        for e in top_emails:
-            n = next(
-                (s.get("name") or s["email"] for s in senders if s["email"] == e),
-                e,
-            )
-            # 같은 이름 중복 제거 (다른 이메일로 같은 사람일 때)
-            if n not in seen:
-                names.append(n)
-                seen.add(n)
-        msg = (
-            f'💡 <b>인사이트:</b> "회신 필요" 비율이 {pct:.0f}%로 평소보다 높아요. '
-            f'{escape(", ".join(names))} 회신을 먼저 챙기는 걸 추천합니다.'
+        rows_html += _heatmap_row(
+            name=s.get("name") or s["email"],
+            counts=counts,
+            total=s["message_count"],
         )
-        st.markdown(f'<div class="insight-card">{msg}</div>', unsafe_allow_html=True)
+
+    section_html = (
+        '<div class="section-card">'
+        '<div class="section-head">'
+        '<div class="section-title">👥 컨택트별 활동 (최근 7일)</div>'
+        f'<div class="section-meta">상위 {len(top)}명</div>'
+        "</div>"
+        f"{rows_html}"
+        "</div>"
+    )
+    st.markdown(section_html, unsafe_allow_html=True)
+
+# 메일 상태 분포 — SVG 도넛 + 커스텀 범례 + 인사이트
+with b2:
+    counter = Counter(m.get("status") or "참고" for m in all_messages)
+    total_msgs = sum(counter.values()) or 1
+    # 정해진 순서로 슬라이스 구성
+    ordered = [
+        (lbl, counter.get(lbl, 0), _STATUS_COLORS[lbl])
+        for lbl in ["회신 필요", "진행 중", "완료", "참고"]
+    ]
+    donut_html = _donut_svg(ordered, total_msgs)
+    legend_html = "".join(
+        _legend_row(lbl, color, count / total_msgs * 100)
+        for lbl, count, color in ordered
+    )
+
+    # 인사이트 — 회신 필요 비율 20% 초과 시 추천 메시지
+    insight_html = ""
+    if all_messages and needs_reply:
+        pct = len(needs_reply) / len(all_messages) * 100
+        if pct > 20:
+            top_emails = [
+                e for e, _ in
+                Counter(m["sender_email"] for m in needs_reply).most_common(2)
+            ]
+            names: list[str] = []
+            seen: set[str] = set()
+            for e in top_emails:
+                n = next(
+                    (s.get("name") or s["email"] for s in senders if s["email"] == e),
+                    e,
+                )
+                if n not in seen:
+                    names.append(n)
+                    seen.add(n)
+            insight_html = (
+                f'<div class="insight-card">'
+                f'<b>인사이트:</b> 이번 주 "회신 필요" 비율이 {pct:.0f}%로 평소보다 높아요. '
+                f'{escape(", ".join(names))} 회신을 먼저 챙기는 걸 추천합니다.'
+                f"</div>"
+            )
+
+    section_html = (
+        '<div class="section-card">'
+        '<div class="section-head">'
+        '<div class="section-title">🍩 메일 상태 분포</div>'
+        f'<div class="section-meta">전체 {total_msgs}건</div>'
+        "</div>"
+        '<div class="donut-wrap">'
+        f'<div class="donut-svg">{donut_html}</div>'
+        f'<div class="donut-legend">{legend_html}</div>'
+        "</div>"
+        f"{insight_html}"
+        "</div>"
+    )
+    st.markdown(section_html, unsafe_allow_html=True)
