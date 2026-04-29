@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 44" width="180" height="44">
+  <g transform="translate(8 12)">
+    <rect x="0" y="0" width="22" height="18" rx="3" ry="3" fill="none" stroke="#4a8df0" stroke-width="2"/>
+    <polyline points="0,2 11,12 22,2" fill="none" stroke="#4a8df0" stroke-width="2" stroke-linejoin="round"/>
+  </g>
+  <text x="40" y="29" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="20" font-weight="700" fill="#1a1a1a">Mail4Work</text>
+</svg>

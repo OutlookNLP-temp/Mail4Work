@@ -1,7 +1,12 @@
+from pathlib import Path
+
 import streamlit as st
 
 # 페이지 메타 (최상위 진입점에서만 set)
 st.set_page_config(layout="wide", page_title="Mail4Work")
+
+# 사이드바 최상단 브랜드 로고
+st.logo(str(Path(__file__).parent / "logo.svg"), size="large")
 
 # 멀티페이지 네비게이션
 dashboard = st.Page(
