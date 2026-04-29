@@ -10,10 +10,12 @@ _MODEL = os.getenv("SUMMARIZER_MODEL", "exaone3.5:2.4b")
 # 짧은 메일은 그냥 원문 보여주는 게 더 유용
 _MIN_INPUT_CHARS = 100
 
-_PROMPT = """다음은 한국어 메일 본문입니다. 핵심 내용만 2-3문장 이내로 한국어로 요약해 주세요.
+_PROMPT = """다음은 한국어 메일 본문입니다. 핵심만 압축한 짧은 요약을 만들어 주세요.
 규칙:
+- 1~2문장, 합쳐서 100자 이내로 만들어 주세요.
 - 인사말과 마무리 인사말은 빼주세요.
 - 본문에 없는 내용은 절대 추가하지 마세요. 본문에서 직접 확인되는 사실만 요약하세요.
+- 부연 설명, 의도 추측, 일반적인 결론(예: "도움이 될 것입니다") 같은 추가 문장은 넣지 마세요.
 - "요약:" 같은 머리말이나 마크다운(**, ##) 없이 본문만 출력하세요.
 - {subject_rule}
 
@@ -155,6 +157,24 @@ def _split_paragraphs(text: str) -> str:
 
     # 단락 사이는 빈 줄로 — 시각적 가독성
     return "\n\n".join(paragraphs)
+
+
+def warmup(timeout: float = 30.0) -> bool:
+    """모델을 메모리에 미리 올려 첫 요청 콜드 스타트(약 2~3초) 회피."""
+    try:
+        httpx.post(
+            f"{_OLLAMA_HOST}/api/generate",
+            json={
+                "model": _MODEL,
+                "prompt": "ok",
+                "stream": False,
+                "options": {"num_predict": 1},
+            },
+            timeout=timeout,
+        ).raise_for_status()
+        return True
+    except httpx.HTTPError:
+        return False
 
 
 def main():

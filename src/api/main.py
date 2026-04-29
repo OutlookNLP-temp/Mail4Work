@@ -35,6 +35,12 @@ app.add_middleware(
 )
 
 
+@app.on_event("startup")
+def _warmup_summarizer():
+    # 첫 메시지 조회 시 콜드 스타트(2~3초) 회피용으로 모델 메모리 로드 트리거
+    summarize.warmup()
+
+
 def _me_email() -> str:
     # ME_EMAIL이 비어있으면 IMAP_USER 사용
     return os.getenv("ME_EMAIL") or os.environ.get("IMAP_USER", "")
