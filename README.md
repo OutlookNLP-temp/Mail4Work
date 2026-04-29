@@ -103,3 +103,41 @@ src/
 ├── api/         # FastAPI 엔드포인트
 └── ui/          # Streamlit 앱 (Dashboard / Mail Groups)
 ```
+
+## 데이터 흐름 (동기화 → 조회)
+
+```mermaid
+sequenceDiagram
+    actor User as 사용자
+    participant ST as Streamlit
+    participant API as FastAPI
+    participant IMAP as IMAP Server
+    participant DB as SQLite
+    participant LLM as Ollama (EXAONE)
+
+    Note over User,DB: ① 동기화
+    User->>ST: "🔄 새 메일 동기화" 클릭
+    ST->>API: POST /sync
+    API->>IMAP: fetch (last_uid 이후)
+    IMAP-->>API: 신규 메일 N건
+    API->>DB: messages INSERT
+    API-->>ST: { fetched: N }
+
+    Note over User,LLM: ② 조회 + lazy 분석
+    User->>ST: 컨택트 클릭
+    ST->>API: GET /senders/{id}/messages
+    API->>DB: SELECT messages
+
+    loop 각 메시지
+        API->>DB: 캐시된 요약/상태/일정 조회
+        alt 캐시 미스
+            API->>LLM: summarize(body)
+            LLM-->>API: 요약 텍스트
+            API->>API: classify (키워드)<br/>schedule (정규식+한국어 파서)
+            API->>DB: summaries / status / schedules INSERT
+        end
+    end
+
+    API-->>ST: messages + stats
+    ST-->>User: 채팅 뷰 렌더
+```
