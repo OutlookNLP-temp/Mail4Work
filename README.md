@@ -1,28 +1,35 @@
 # Mail4Work
 
-발신자/대화 단위로 메일을 재구성하고, 요약·일정·상태를 자동 분석해주는 업무 메일 도우미.
-받은편지함을 한 줄씩 훑는 대신 **누구와 무슨 얘기를 하고 있고, 무엇이 회신을 기다리는지** 한눈에 본다.
+발신자/대화 단위로 메일을 재구성하고, 요약·일정·상태를 자동 분석해주는 업무 메일 기반 업무 자동화 서비스입니다.
+받은편지함을 한 줄씩 훑는 대신 **누구와 무슨 얘기를 하고 있고, 무엇이 회신을 기다리는지** 한눈에 볼 수 있습니다.
 
-![Dashboard](docs/screenshots/dashboard.png)
+
 
 ## Features
 
 ### 📊 Dashboard
+<img width="800" height="400" alt="image" src="https://github.com/user-attachments/assets/cc057c63-74ea-42be-9564-8c04c33f36de" />
+
 
 - 회신 필요 / 진행 중 / 이번 주 일정 / 신규 24H KPI 카드
 - 회신 필요 메일 리스트 + 다가오는 일정 카드
+
 - 컨택트별 최근 7일 활동 히트맵
 - 메일 상태 분포 도넛 + 인사이트 추천
 
 ### 💬 Mail Groups
+<img width="800" height="400" alt="image" src="https://github.com/user-attachments/assets/a40a4d88-19d5-4aa4-a9bc-2139e54dcd49" />
 
 - 컨택트별 채팅 인터페이스 — 받은 메일은 좌측, 보낸 메일은 우측 정렬
 - 메시지마다 자동 분류된 **상태 뱃지** (회신 필요 / 진행 중 / 완료 / 참고)
 - 본문에서 추출된 **일정 카드**를 인라인으로 표시
+
+<img width="400" height="400" alt="image" src="https://github.com/user-attachments/assets/5a0de116-c9f5-4a32-ac6f-a42fb8f30786" />
+
 - **AI 요약** 박스로 빠르게 핵심 파악 + 전문 보기 토글
 - 사이드바: 카드형 컨택트 리스트 (아바타·제목 미리보기·시간·회신 필요 카운트)
 
-![Mail Groups](docs/screenshots/mail_groups.png)
+
 
 ## Stack
 
@@ -43,22 +50,10 @@ pip install -r requirements.txt
 cp .env.example .env  # 값 채우기
 ```
 
-### 환경 변수
-
-| 키 | 설명 | 예시 |
-| --- | --- | --- |
-| `IMAP_HOST` | IMAP 서버 호스트 | `imap.gmail.com` |
-| `IMAP_PORT` | 포트 (보통 993) | `993` |
-| `IMAP_USER` | 메일 계정 | `you@example.com` |
-| `IMAP_PASSWORD` | 앱 비밀번호 (Gmail 2FA 사용 시) | `xxxx xxxx xxxx xxxx` |
-| `IMAP_FOLDERS` | 동기화 폴더 (콤마 구분) | `INBOX,Sent` |
-| `ME_EMAIL` | "나"로 식별할 이메일 (비우면 `IMAP_USER` 사용) | _(빈 값)_ |
-| `OLLAMA_HOST` | Ollama 데몬 주소 | `http://localhost:11434` |
-| `SUMMARIZER_MODEL` | 요약 모델명 | `exaone3.5:2.4b` |
 
 ### Ollama (요약 모델)
 
-요약은 로컬 Ollama로 EXAONE 3.5 2.4B를 호출한다.
+요약은 로컬 Ollama로 EXAONE 3.5 2.4B를 호출합니다.
 
 ```bash
 brew install ollama          # macOS
@@ -79,7 +74,6 @@ uvicorn src.api.main:app --reload
 streamlit run src/ui/mail.py
 ```
 
-브라우저에서 http://localhost:8501 로 접속.
 
 ## API
 
