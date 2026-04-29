@@ -17,6 +17,20 @@ _PROMPT = """다음은 한국어 메일 본문입니다. 핵심 내용만 2-3문
 
 [요약]"""
 
+# 본문 전처리 — 토큰 낭비 줄여 핵심 본문이 모델 어텐션에 더 많이 잡히게
+_QUOTED_RE = re.compile(r"^\s*>.*$", re.MULTILINE)  # 인용부 (>>>...)
+_SIGNATURE_RE = re.compile(r"\n--\s*\n.*$", re.DOTALL)  # 표준 서명 구분자 이후
+_BLANK_RUN_RE = re.compile(r"\n{3,}")  # 3개 이상 빈 줄 → 2개로
+
+
+def _preprocess(body: str) -> str:
+    # CRLF 정규화 + 인용부/서명 제거 + 빈 줄 압축
+    body = body.replace("\r\n", "\n").replace("\r", "\n")
+    body = _QUOTED_RE.sub("", body)
+    body = _SIGNATURE_RE.sub("", body)
+    body = _BLANK_RUN_RE.sub("\n\n", body)
+    return body.strip()
+
 
 def summarize(text: str, timeout: float = 120.0) -> str:
     """EXAONE(Ollama)로 한국어 메일 본문을 요약한다."""
@@ -24,8 +38,8 @@ def summarize(text: str, timeout: float = 120.0) -> str:
     if not text or not text.strip():
         return ""
 
-    # 너무 짧으면 모델 거치지 않고 원문 반환
-    body = text.strip()
+    # 전처리 후 길이 재판정 — 짧으면 원문 반환
+    body = _preprocess(text)
     if len(body) < _MIN_INPUT_CHARS:
         return body
 
@@ -39,7 +53,8 @@ def summarize(text: str, timeout: float = 120.0) -> str:
                 "stream": False,
                 "options": {
                     "temperature": 0.2,
-                    "num_predict": 200,
+                    # 한국어 토큰 기준 2-3문장이 잘리지 않게 여유 있게
+                    "num_predict": 500,
                 },
             },
             timeout=timeout,
